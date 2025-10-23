@@ -465,7 +465,7 @@ if __name__ == "__main__":
     
     # Test data loading
     for split, data_loader in data_loaders.items():
-        print(f"\n{split.upper()} DataLoader:")
+        print(f"\n{split.upper()} DataLoad:")
         print(f"Number of batches: {len(data_loader)}")
         
         # Get a sample batch
