@@ -1,6 +1,6 @@
 # Flood Vision ETL and Data Preprocessing Pipeline
 
-This repository contains a comprehensive ETL (Extract, Transform, Load) pipeline and data preprocessing utilities for the **FloodVision: Cloud-Aware SAR–Optical Fusion for Global Flood Mapping** project using Sentinel-1 (SAR) and Sentinel-2 (Optical) satellite imagery from the Copernicus Data Space Ecosystem.
+This repository contains a comprehensive ETL (Extract, Transform, Load) pipeline and data preprocessing utilities for the **FloodVision: Cloud-Aware SAR–Optical Fusion for Global Flood Mapping** project using Sentinel 1 (SAR) and Sentinel 2 (Optical) satellite imagery from the Copernicus Data Space Ecosystem.
 
 ## Features
 
@@ -91,7 +91,6 @@ FloodVision/
 ├── dataset_loaders.py       # PyTorch dataset classes
 ├── config.json             # Configuration file
 ├── requirements.txt        # Python dependencies
-├── example_usage.py       # Usage examples
 └── README.md              # This file
 ```
 
