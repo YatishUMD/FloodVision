@@ -405,7 +405,7 @@ class DataNormalization:
 
 def create_preprocessing_pipeline(config: Dict) -> Dict:
     """
-    Create a complete preprocessing pipeline
+    Create a complete preprocessing pipelin
     
     Args:
         config: Configuration dictionary
