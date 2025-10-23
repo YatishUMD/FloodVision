@@ -21,7 +21,6 @@ from typing import Dict, List, Tuple, Optional
 import cv2
 import pandas as pd
 from datetime import datetime
-import patchify
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
