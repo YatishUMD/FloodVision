@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.env
+.venv
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.history/
+.cursor/
+
+# Project Data
+# Ignore downloaded datasets but keep code in src/data
+/data/
+cloudsen12_data/
+sen1floods11_data/
+checkpoints/
+logs/
+output/
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+*.tar.gz
+*.zip
+
+# Jupyter Notebooks
+.ipynb_checkpoints

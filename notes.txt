@@ -1,0 +1,64 @@
+# FloodVision Data Pipeline Notes
+
+## 1. Downloading Data (src/data/download_datasets.py)
+**Goal:** Automate fetching massive satellite datasets from the cloud to your local machine.
+
+*   **How it works:**
+    1.  **Entry Point (`if __name__ == "__main__":`)**:
+        *   It figures out where your project root is (`flood vision/`) regardless of where you run the script from.
+        *   It sets the default download location to `flood vision/data/`.
+        *   It uses `argparse` to let you run commands like `python download_datasets.py sen1floods11`.
+    2.  **Downloading Sen1Floods11 (`download_sen1floods11`)**:
+        *   It uses `gsutil` (a Google Cloud command-line tool).
+        *   The command `gsutil -m rsync -r ...` is powerful:
+            *   `-m`: Multi-threaded (downloads many files at once -> faster).
+            *   `rsync`: "Remote Sync" — if you run it twice, it only downloads *new* files, skipping ones you already have.
+    3.  **Downloading CloudSEN12 (`download_cloudsen12`)**:
+        *   It uses the `huggingface_hub` Python library.
+        *   It fetches specific `.taco` (archive) files from the Taco Foundation's repository.
+    4.  **Downloading SEN12MS (`download_sen12ms`)**:
+        *   It uses Python's built-in `ftplib` to connect to a university FTP server in Munich.
+        *   It logs in with a public username/password and streams the file to your disk.
+
+## 2. Creating Splits (src/data/preprocessing.py)
+**Goal:** Divide the data into "Train" (study material) and "Test" (exam material) sets **fairly**.
+
+*   **The Problem:**
+    *   Satellite images from the same region (e.g., Bolivia) look very similar.
+    *   If you randomly shuffle images, you might train on "Bolivia Image A" and test on "Bolivia Image B". The model would cheat by recognizing the geography instead of detecting water.
+*   **The Solution (Geographic Splitting):**
+    *   We manually define `TEST_REGIONS = ["India", "Cambodia", "Pakistan", ...]`.
+    *   We say: "All images from these Asian countries are for the **Final Exam** (Test)."
+    *   "All images from America/Africa/Europe are for **Study** (Train)."
+*   **How the code works:**
+    1.  **Scanning**: It looks at the `LabelHand` folder (the ground truth masks) to find every available image file.
+    2.  **Parsing Filenames**: It reads a file like `Bolivia_12345_LabelHand.tif` and splits the string to extract the region: `"Bolivia"`.
+    3.  **Assigning Split**:
+        *   If Region is in `TEST_REGIONS` -> Mark as "test".
+        *   Else -> Mark as "train".
+    4.  **Saving**: It writes two files, `train_split.csv` and `test_split.csv`, containing the list of filenames for each group. This ensures every time we run the model, we use the exact same split.
+
+## 3. Loading Data (src/data/dataset.py)
+**Goal:** Feed the data to PyTorch one image at a time during training.
+
+*   **Class `Sen1Floods11Dataset`**: This inherits from `torch.utils.data.Dataset`.
+*   **`__init__` (Setup)**:
+    *   It takes `split="train"` or `"test"`.
+    *   It reads the corresponding CSV file (created in step 2) to know exactly which files to load.
+    *   It prepares the paths to the three folders: `S1Hand` (Radar), `S2Hand` (Optical), and `LabelHand` (Water Mask).
+*   **`__getitem__` (The Worker)**:
+    *   This function is called thousands of times during training. "Get me image #42".
+    *   **Step 1: Find Paths**: It constructs the filenames for S1, S2, and Label based on the ID.
+    *   **Step 2: Load TIFs**: It uses `rasterio` to open the geospatial image files.
+    *   **Step 3: Preprocess**:
+        *   **S1 (Radar)**: Radar is "loud". It clips values below -25dB (noise) and scales them to 0-1.
+        *   **S2 (Optical)**: Satellite values are 0-10000. It divides by 10000 to get 0-1.
+    *   **Step 4: Augment (Optional)**:
+        *   It temporarily reshapes images to `(H, W, Channels)` because the augmentation library (`albumentations`) requires it.
+        *   It applies random flips/rotations to **both** the image and the mask simultaneously.
+    *   **Step 5: Output**: It converts everything to PyTorch Tensors (math arrays) in the format `(Channels, Height, Width)` and returns them as a dictionary.
+
+## Summary of Flow
+1.  **Run `download_datasets.py`** -> Raw TIF files land on your hard drive.
+2.  **Run `preprocessing.py`** -> Scans those files and decides which ones are for training vs testing, saving the list to CSVs.
+3.  **Train Model (Future)** -> The model initializes `Sen1Floods11Dataset`, which reads the CSV, loads the TIFs, fixes the math, and hands them to the neural network.
