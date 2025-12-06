@@ -9,7 +9,26 @@ from torch.utils.data import DataLoader
 
 from src.data.dataset import Sen1Floods11Dataset
 from src.data.transforms import get_val_transforms
+# We can import get_model from src.training.train if the path is set up correctly, 
+# or just redefine the minimal logic here. 
+# For safety, let's redefine the model loading mapping or import if we are sure.
+# Given the structure, `from src.training.train import get_model` should work if run from root.
+# But to avoid potential import issues if train.py has other heavy imports, 
+# I will just import the models directly.
 from src.models.decoders import FloodNet
+from src.models.baselines import OpticalUNet, SarUNet, SimpleFusionUNet
+
+def get_model(model_type, num_classes=2):
+    if model_type == 'optical':
+        return OpticalUNet(num_classes=num_classes)
+    elif model_type == 'sar':
+        return SarUNet(num_classes=num_classes)
+    elif model_type == 'simple':
+        return SimpleFusionUNet(num_classes=num_classes)
+    elif model_type == 'gated':
+        return FloodNet(num_classes=num_classes)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
 
 def calculate_iou(pred, label):
     # Flatten
@@ -44,8 +63,8 @@ def evaluate(args):
     if torch.backends.mps.is_available():
         device = torch.device("mps")
         
-    print(f"Loading model from {args.checkpoint}...")
-    model = FloodNet(num_classes=2).to(device)
+    print(f"Loading {args.model_type} model from {args.checkpoint}...")
+    model = get_model(args.model_type, num_classes=2).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location=device))
     model.eval()
     
@@ -98,8 +117,8 @@ def evaluate(args):
     cloudy_subset = df[df["cloud_pct"] >= 0.2]
     
     overall_iou = df["intersection"].sum() / df["union"].sum()
-    clear_iou = clear_subset["intersection"].sum() / clear_subset["union"].sum()
-    cloudy_iou = cloudy_subset["intersection"].sum() / cloudy_subset["union"].sum()
+    clear_iou = clear_subset["intersection"].sum() / (clear_subset["union"].sum() + 1e-6)
+    cloudy_iou = cloudy_subset["intersection"].sum() / (cloudy_subset["union"].sum() + 1e-6)
     
     print("\n--- Evaluation Results ---")
     print(f"Overall mIoU: {overall_iou:.4f}")
@@ -107,14 +126,17 @@ def evaluate(args):
     print(f"Cloudy Images (n={len(cloudy_subset)}) mIoU: {cloudy_iou:.4f}")
     
     # Save per-image results
-    df.to_csv("evaluation_results.csv", index=False)
-    print("\nDetailed results saved to evaluation_results.csv")
+    out_name = f"evaluation_results_{args.model_type}.csv"
+    df.to_csv(out_name, index=False)
+    print(f"\nDetailed results saved to {out_name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model_type", type=str, required=True, 
+                        choices=['optical', 'sar', 'simple', 'gated'],
+                        help="Model architecture to evaluate")
     parser.add_argument("--data_dir", default="data/sen1floods11", help="Path to dataset")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint (.pth)")
     args = parser.parse_args()
     
     evaluate(args)
-
