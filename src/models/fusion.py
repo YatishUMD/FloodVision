@@ -28,11 +28,12 @@ class GatedFusion(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, s1_feat, s2_feat):
+    def forward(self, s1_feat, s2_feat, return_attention=False):
         """
         Args:
             s1_feat: Feature map from SAR Encoder (B, C, H, W)
             s2_feat: Feature map from Optical Encoder (B, C, H, W)
+            return_attention: If True, returns (fused, attention)
         Returns:
             fused: Weighted combination (B, C, H, W)
         """
@@ -47,5 +48,7 @@ class GatedFusion(nn.Module):
         # Broadcast attention map across all channels
         fused = attention * s2_feat + (1 - attention) * s1_feat
         
+        if return_attention:
+            return fused, attention
+        
         return fused
-

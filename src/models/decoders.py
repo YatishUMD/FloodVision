@@ -91,17 +91,27 @@ class FloodNet(nn.Module):
             nn.Conv2d(32, num_classes, kernel_size=1) # Logits
         )
 
-    def forward(self, s1, s2):
+    def forward(self, s1, s2, return_attention=False):
         # 1. Encode
         f1 = self.s1_encoder(s1) # List of 5 features
         f2 = self.s2_encoder(s2) # List of 5 features
         
         # 2. Fuse Features at each scale
-        x0 = self.fusion0(f1[0], f2[0]) # 64 ch
-        x1 = self.fusion1(f1[1], f2[1]) # 64 ch
-        x2 = self.fusion2(f1[2], f2[2]) # 128 ch
-        x3 = self.fusion3(f1[3], f2[3]) # 256 ch
-        x4 = self.fusion4(f1[4], f2[4]) # 512 ch (Bottleneck)
+        # If return_attention is True, we only grab the attention map from the finest scale (x0)
+        # or all scales. For visualization, usually the highest resolution map (x0) is best.
+        
+        if return_attention:
+            x0, att0 = self.fusion0(f1[0], f2[0], return_attention=True)
+            x1 = self.fusion1(f1[1], f2[1]) 
+            x2 = self.fusion2(f1[2], f2[2]) 
+            x3 = self.fusion3(f1[3], f2[3]) 
+            x4 = self.fusion4(f1[4], f2[4]) 
+        else:
+            x0 = self.fusion0(f1[0], f2[0]) 
+            x1 = self.fusion1(f1[1], f2[1]) 
+            x2 = self.fusion2(f1[2], f2[2]) 
+            x3 = self.fusion3(f1[3], f2[3]) 
+            x4 = self.fusion4(f1[4], f2[4]) 
         
         # 3. Decode
         # Up from x4 (bottleneck) using x3 as skip
@@ -113,5 +123,7 @@ class FloodNet(nn.Module):
         # 4. Final Prediction
         out = self.final_conv(d1)
         
+        if return_attention:
+            return out, att0
+            
         return out
-
