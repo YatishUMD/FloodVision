@@ -24,12 +24,15 @@ flood vision/
 │   │   ├── download_datasets.py  # Scripts to fetch data from cloud/FTP
 │   │   └── preprocessing.py      # Splits data into Train/Test (Geographic Split)
 │   ├── models/
+│   │   ├── baselines.py          # Baseline models (Optical, SAR, Simple Fusion)
 │   │   ├── decoders.py           # Main FloodNet architecture
 │   │   ├── fusion.py             # Gated Fusion module (Attention mechanism)
 │   │   └── pretraining.py        # CloudNet for pre-training
-├── train.py              # Main training script (Flood Detection)
+│   ├── training/
+│       └── train.py              # Main training script (Flood Detection)
 ├── evaluate.py           # Evaluation script (IoU metrics)
 ├── pretrain.py           # Pre-training script (Cloud Detection)
+├── visualize.py          # Visualization script (Comparisons & Attention Maps)
 └── notes.txt             # Development notes
 ```
 
@@ -42,6 +45,7 @@ flood vision/
 - Rasterio
 - Albumentations
 - Google Cloud SDK (`gsutil`) - for downloading Sen1Floods11
+- Matplotlib (for visualization)
 
 ### 2. Data Preparation
 
@@ -75,16 +79,31 @@ Pre-train the Optical Encoder to understand clouds. This helps the fusion module
 python pretrain.py --epochs 5 --save_path checkpoints/pretrained_s2.pth
 ```
 
-### Phase 2: Flood Detection Training
+### Phase 2: Baselines & Flood Detection Training
 
-Train the full dual-stream model (S1 + S2). If you ran Phase 1, it will load the pre-trained weights to initialize the optical branch.
+You can train various model architectures including baselines and the main fusion model.
+
+**Train Baselines:**
 
 ```bash
-# Train for 20 epochs with a batch size of 8
-python train.py --epochs 20 --batch_size 8 --s2_weights checkpoints/pretrained_s2.pth
+# Optical-only Baseline (Sentinel-2)
+python src/training/train.py --model_type optical --epochs 50 --batch_size 16 --experiment_name optical_baseline
+
+# SAR-only Baseline (Sentinel-1)
+python src/training/train.py --model_type sar --epochs 50 --batch_size 16 --experiment_name sar_baseline
+
+# Simple Fusion Baseline (Concatenation)
+python src/training/train.py --model_type simple --epochs 50 --batch_size 16 --experiment_name simple_fusion
 ```
 
-- **Outputs:** Saves the best model to `checkpoints/best_model.pth`.
+**Train Main Gated Fusion Model:**
+Train the full dual-stream model (S1 + S2) with the gated attention mechanism. If you ran Phase 1, you can load the pre-trained weights.
+
+```bash
+python src/training/train.py --model_type gated --epochs 50 --batch_size 16 --s2_weights checkpoints/pretrained_s2.pth --experiment_name gated_fusion
+```
+
+- **Outputs:** Saves the best model to `checkpoints/{experiment_name}_best.pth`.
 - **Logs:** Displays training loss and validation IoU (Intersection over Union) for the Water class.
 
 ## Evaluation
@@ -92,7 +111,11 @@ python train.py --epochs 20 --batch_size 8 --s2_weights checkpoints/pretrained_s
 Evaluate the model on the unseen test regions. The evaluation script calculates the **Mean IoU** and also provides a stratified report (performance on clear vs. cloudy images).
 
 ```bash
-python evaluate.py --checkpoint checkpoints/best_model.pth
+# Evaluate Optical Baseline
+python evaluate.py --model_type optical --checkpoint checkpoints/optical_baseline_best.pth
+
+# Evaluate Gated Fusion Model
+python evaluate.py --model_type gated --checkpoint checkpoints/gated_fusion_best.pth
 ```
 
 **Example Output:**
@@ -103,6 +126,22 @@ Overall mIoU: 0.7421
 Clear Images (n=45) mIoU:  0.7810
 Cloudy Images (n=12) mIoU: 0.6105
 ```
+
+## Visualization
+
+You can generate visualizations to interpret the model's behavior, specifically the **Gated Attention Map** which shows where the model relies on Optical vs. SAR data.
+
+```bash
+python visualize.py --checkpoint checkpoints/gated_fusion_best.pth --num_samples 10
+```
+
+Images will be saved to the `visualizations/` folder, showing:
+
+1.  Optical Image (RGB)
+2.  SAR Image (Radar)
+3.  **Attention Map** (Dark = Trust Radar, Bright = Trust Optical)
+4.  Ground Truth Mask
+5.  Model Prediction
 
 ## Model Architecture
 
