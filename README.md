@@ -1,155 +1,285 @@
-# FloodVision: Multi-Modal Flood Detection
+# FloodVision: Cloud-Aware SAR-Optical Fusion for All-Weather Flood Detection
 
-FloodVision is a deep learning project designed to detect flood water from satellite imagery. It leverages multi-modal data fusion, combining Sentinel-1 (SAR) and Sentinel-2 (Optical) imagery to robustly map floods even in cloudy conditions where optical sensors fail.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 
-## Project Overview
+**Course:** MSML640 - Computer Vision  
+**Authors:** Yatish Sikka, Ritvik Chaturvedi  
+**Institution:** University of Maryland, College Park  
+**Date:** December 2025
 
-Traditional flood mapping relies heavily on optical imagery, which is often obstructed by clouds during storm events. Radar (SAR) sees through clouds but is noisy and harder to interpret. This project uses a **Gated Fusion Network** to:
+---
 
-1.  **Pre-train** on massive cloud datasets to learn robust optical features.
-2.  **Fuse** Optical and Radar data using an attention mechanism that learns to "trust" the Radar signal when the Optical signal is cloudy.
-3.  **Detect** water/flood pixels with high accuracy across varying weather conditions.
+## 📋 Overview
 
-## Repository Structure
+FloodVision is a deep learning system for all-weather flood detection that intelligently combines Sentinel-1 SAR and Sentinel-2 optical satellite imagery. Our cloud-aware gating mechanism learns to adaptively weight each modality based on cloud coverage, enabling reliable flood mapping even during storms when traditional optical systems fail.
 
+### Key Innovation
+We discovered that having a gating architecture alone isn't sufficient - the model must be **trained with synthetic cloud augmentation** to learn proper adaptation behavior. This insight led to a 26x performance improvement under heavy cloud conditions.
+
+### Architecture Overview
 ```
-flood vision/
-├── checkpoints/          # Saved model weights
-├── data/                 # Dataset storage
-│   ├── sen1floods11/     # Main flood dataset
-│   └── cloudsen12/       # Pre-training cloud dataset
-├── src/
-│   ├── data/
-│   │   ├── dataset.py            # PyTorch Dataset classes (Sen1Floods11, CloudSEN12)
-│   │   ├── download_datasets.py  # Scripts to fetch data from cloud/FTP
-│   │   └── preprocessing.py      # Splits data into Train/Test (Geographic Split)
-│   ├── models/
-│   │   ├── baselines.py          # Baseline models (Optical, SAR, Simple Fusion)
-│   │   ├── decoders.py           # Main FloodNet architecture
-│   │   ├── fusion.py             # Gated Fusion module (Attention mechanism)
-│   │   └── pretraining.py        # CloudNet for pre-training
-│   ├── training/
-│       └── train.py              # Main training script (Flood Detection)
-├── evaluate.py           # Evaluation script (IoU metrics)
-├── pretrain.py           # Pre-training script (Cloud Detection)
-├── visualize.py          # Visualization script (Comparisons & Attention Maps)
-└── notes.txt             # Development notes
+┌─────────────────────────────────────────┐
+│  Optical Branch (Sentinel-2, 13 bands)  │
+│  └─> UNet → Flood Prediction A         │
+├─────────────────────────────────────────┤
+│  SAR Branch (Sentinel-1, 2 bands)       │
+│  └─> UNet → Flood Prediction B         │
+├─────────────────────────────────────────┤
+│  Cloud Detection → Gate Network → α    │
+└─────────────────────────────────────────┘
+           ↓
+Final = (1-α) × A + α × B
 ```
 
-## Getting Started
+---
 
-### 1. Prerequisites
+## 📁 Project Structure
+```
+FloodVision/
+├── README.md                          
+├── requirements.txt                   # Python dependencies
+│
+├── models/
+│   ├── baselines.py                  # Optical, SAR, Simple Fusion
+│   └── cloud_aware_fusion.py         # Cloud-aware gated fusion
+│
+├── dataset.py                    # SEN1Floods11 dataloader
+├── dataset_with_clouds.py        # Dataloader with cloud augmentation
+└── cloud_augmentation.py         # Synthetic cloud generation
+│
+├── train.py                           # Training script for baselines
+├── train_cloud_aware_2.py           # Training with cloud augmentation
+├── evaluate_all_with_clouds.py
+├── create_final_visualizations.py    # Generate figures
+```
 
-- Python 3.8+
-- PyTorch
-- Rasterio
-- Albumentations
-- Google Cloud SDK (`gsutil`) - for downloading Sen1Floods11
-- Matplotlib (for visualization)
+---
 
-### 2. Data Preparation
+## 🔧 Installation
 
-This project automates data downloading. You will need approximately **15GB** of space for the core datasets.
+### Prerequisites
+- Python 3.10+
+- CUDA 11.8+ (for GPU training)
+- 64GB RAM recommended
+- ~100GB disk space for dataset
 
-**Step A: Download Data**
+### Setup Environment
 
+#### Option 1: Conda (Recommended)
 ```bash
-# Download Sen1Floods11 (Flood Data)
-python src/data/download_datasets.py sen1floods11
+# Clone repository
+git clone https://github.com/YatishUMD/FloodVision.git
+cd FloodVision
 
-# Download CloudSEN12 (Cloud Data for Pre-training)
-python src/data/download_datasets.py cloudsen12
+# Create conda environment
+conda create -n floodvision python=3.10
+conda activate floodvision
+
+# Install PyTorch with CUDA support
+pip install torch==2.5.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Install geospatial and other dependencies
+conda install -c conda-forge rasterio gdal opencv matplotlib pandas scikit-learn scipy
+pip install segmentation-models-pytorch albumentations tensorboard tqdm
 ```
 
-**Step B: Generate Splits**
-To ensure fair evaluation, we split the data geographically (e.g., training on America/Africa, testing on Asia).
-
+#### Option 2: Using requirements.txt
 ```bash
-# Scans the downloaded files and creates train_split.csv / test_split.csv
-python src/data/preprocessing.py
+pip install -r requirements.txt
 ```
 
-## Model Training
-
-### Phase 1: Pre-training (Optional but Recommended)
-
-Pre-train the Optical Encoder to understand clouds. This helps the fusion module identify when to ignore the optical signal.
-
+### Environment Variables (HPC/SLURM)
 ```bash
-python pretrain.py --epochs 5 --save_path checkpoints/pretrained_s2.pth
+# Add to your .bashrc or run before training
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 ```
 
-### Phase 2: Baselines & Flood Detection Training
+---
 
-You can train various model architectures including baselines and the main fusion model.
+## 📊 Dataset Setup
 
-**Train Baselines:**
-
+### Download SEN1Floods11
 ```bash
-# Optical-only Baseline (Sentinel-2)
-python src/training/train.py --model_type optical --epochs 50 --batch_size 16 --experiment_name optical_baseline
+# Create data directory
+mkdir -p data/sen1flood11
+cd data/sen1flood11
 
-# SAR-only Baseline (Sentinel-1)
-python src/training/train.py --model_type sar --epochs 50 --batch_size 16 --experiment_name sar_baseline
+# Download dataset
+# Visit: https://github.com/cloudtostreet/Sen1Floods11
+# Or use direct link if available
+wget https://storage.googleapis.com/sen1floods11/v1.1/data.zip
+unzip data.zip
 
-# Simple Fusion Baseline (Concatenation)
-python src/training/train.py --model_type simple --epochs 50 --batch_size 16 --experiment_name simple_fusion
+# Verify structure
+ls data/flood_events/HandLabeled/
+# Expected: S1Hand/ S2Hand/ LabelHand/
 ```
 
-**Train Main Gated Fusion Model:**
-Train the full dual-stream model (S1 + S2) with the gated attention mechanism. If you ran Phase 1, you can load the pre-trained weights.
+### Expected Directory Structure
+```
+data/sen1flood11/
+└── data/
+    └── flood_events/
+        └── HandLabeled/
+            ├── S1Hand/          # Sentinel-1 SAR (446 .tif files)
+            ├── S2Hand/          # Sentinel-2 Optical (446 .tif files)
+            └── LabelHand/       # Ground truth labels (446 .tif files)
+```
 
+**Dataset Info:**
+- Total samples: 446 (512×512 pixels each)
+- Train/Val/Test split: 312 / 67 / 67
+- Size: ~33 GB
+- Source: [Sen1Floods11 GitHub](https://github.com/cloudtostreet/Sen1Floods11)
+
+---
+
+## 🚀 Quick Start
+
+### Evaluate Pre-trained Models
 ```bash
-python src/training/train.py --model_type gated --epochs 50 --batch_size 16 --s2_weights checkpoints/pretrained_s2.pth --experiment_name gated_fusion
+# Activate environment
+conda activate floodvision
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+
+# Comprehensive evaluation (all models, all cloud levels)
+python evaluate_all_with_clouds.py
+
+# Generate visualizations
+python create_final_visualizations.py
 ```
 
-- **Outputs:** Saves the best model to `checkpoints/{experiment_name}_best.pth`.
-- **Logs:** Displays training loss and validation IoU (Intersection over Union) for the Water class.
+### Train from Scratch
 
-## Evaluation
-
-Evaluate the model on the unseen test regions. The evaluation script calculates the **Mean IoU** and also provides a stratified report (performance on clear vs. cloudy images).
-
+#### 1. Train Baseline Models
 ```bash
-# Evaluate Optical Baseline
-python evaluate.py --model_type optical --checkpoint checkpoints/optical_baseline_best.pth
+# Optical-only
+python train.py --model_type optical --output_dir checkpoints/baseline_optical --epochs 50
 
-# Evaluate Gated Fusion Model
-python evaluate.py --model_type gated --checkpoint checkpoints/gated_fusion_best.pth
+# SAR-only
+python train.py --model_type sar --output_dir checkpoints/baseline_sar --epochs 50
+
+# Simple fusion
+python train.py --model_type fusion --output_dir checkpoints/baseline_fusion --epochs 50
 ```
 
-**Example Output:**
-
-```
---- Evaluation Results ---
-Overall mIoU: 0.7421
-Clear Images (n=45) mIoU:  0.7810
-Cloudy Images (n=12) mIoU: 0.6105
-```
-
-## Visualization
-
-You can generate visualizations to interpret the model's behavior, specifically the **Gated Attention Map** which shows where the model relies on Optical vs. SAR data.
-
+#### 2. Train Cloud-Aware 2 (Recommended)
 ```bash
-python visualize.py --checkpoint checkpoints/gated_fusion_best.pth --num_samples 10
+python train_cloud_aware_2.py \
+    --output_dir checkpoints/cloud_aware_v2 \
+    --epochs 30 \
+    --batch_size 8 \
+    --cloud_augmentation
 ```
 
-Images will be saved to the `visualizations/` folder, showing:
+### Using SLURM (HPC)
+```bash
+# Submit training job
+sbatch scripts/train_cloud_aware_v2.sh
 
-1.  Optical Image (RGB)
-2.  SAR Image (Radar)
-3.  **Attention Map** (Dark = Trust Radar, Bright = Trust Optical)
-4.  Ground Truth Mask
-5.  Model Prediction
+# Monitor progress
+squeue -u $USER
+tail -f logs/cloud_v2_*.out
+```
 
-## Model Architecture
+---
 
-The core model (`FloodNet`) consists of:
+## 💻 Usage Examples
 
-1.  **S1 Encoder:** ResNet-based encoder for SAR (Sentinel-1) data.
-2.  **S2 Encoder:** ResNet-based encoder for Optical (Sentinel-2) data.
-3.  **Gated Fusion Module:** A learnable attention gate that takes features from both encoders and outputs a weighted combination:
-    $F_{fused} = \alpha \cdot F_{S2} + (1 - \alpha) \cdot F_{S1}$
-    Where $\alpha$ is the learned attention map (0 to 1).
-4.  **Decoder:** Upsamples the fused features to generate the final binary flood mask.
+### Inference on New Data
+```python
+import torch
+from models.cloud_aware_fusion import CloudAwareFusionModel
+
+# Load model
+model = CloudAwareFusionModel(encoder_name='resnet34', pretrained=False)
+checkpoint = torch.load('checkpoints/cloud_aware_v2/best_model.pth')
+model.load_state_dict(checkpoint['model_state_dict'])
+model.eval()
+
+# Prepare input batch
+batch = {
+    'optical': optical_tensor,  # (B, 13, H, W)
+    'sar': sar_tensor,          # (B, 2, H, W)
+    'cloud_mask': cloud_mask    # (B, 1, H, W)
+}
+
+# Run inference
+with torch.no_grad():
+    prediction, gate_weight = model(batch)
+    flood_prob = torch.sigmoid(prediction)
+    flood_mask = flood_prob > 0.5
+
+print(f"Gate weight (SAR reliance): {gate_weight.item():.2f}")
+```
+
+### Custom Training
+```python
+from dataset_with_clouds import get_cloud_dataloaders
+from models.cloud_aware_fusion import get_cloud_aware_model
+
+# Load data with cloud augmentation
+train_loader, val_loader, test_loader = get_cloud_dataloaders(
+    data_dir="data/sen1flood11",
+    batch_size=8,
+    cloud_augmentation=True  # Enable synthetic clouds
+)
+
+# Create model
+model = get_cloud_aware_model(encoder_name='resnet34')
+
+# Train (see train_cloud_aware_2.py for full example)
+```
+
+---
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**Issue: `ModuleNotFoundError: No module named 'rasterio'`**
+```bash
+conda install -c conda-forge rasterio gdal
+```
+
+**Issue: `libnetcdf.so.19: cannot open shared object file`**
+```bash
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+# Add to ~/.bashrc to make permanent
+```
+
+**Issue: `CUDA out of memory`**
+```bash
+# Reduce batch size
+python train.py --batch_size 4  # Instead of 8
+```
+
+**Issue: `AssertionError: S1Hand not found`**
+```bash
+# Verify data path
+python -c "from pathlib import Path; print(Path('data/sen1flood11/data/flood_events/HandLabeled/S1Hand').exists())"
+
+# Update path in scripts if needed
+python train.py --data_dir /your/path/to/sen1flood11
+```
+
+---
+
+## 🏆 Acknowledgments
+
+- **Dataset:** [Sen1Floods11](https://github.com/cloudtostreet/Sen1Floods11) by Cloud to Street
+- **Compute:** UMD HPCC Zaratan cluster
+- **Framework:** [segmentation-models-pytorch](https://github.com/qubvel/segmentation_models.pytorch)
+
+---
+
+## 📧 Contact
+
+- **Yatish Sikka** - batman@umd.edu
+- **Ritvik Chaturvedi** - ritvikc@umd.edu
+
+**Project Repository:** https://github.com/YatishUMD/FloodVision
+
+---
+
